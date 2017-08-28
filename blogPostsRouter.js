@@ -7,20 +7,41 @@ const jsonParser = bodyParser.json();
 
 const {BlogPosts} = require('./models');
 
-// create some mock blog posts
-BlogPosts.create('An Algorithm Trained on Emoji Knows When You’re Being Sarcastic on Twitter', 'test content', 'Will Knight');
-
-BlogPosts.create('Biological Teleporter Could Seed Life Through Galaxy', 'test content', 'Brian Alexander');
 
 
 // GET all blog posts
 router.get('/', (req, res) => {
-  res.json(BlogPosts.get());
+  BlogPosts
+    .find({})
+    .exec()
+    .then(blogs => {
+      res.json({
+        blogs: blogs.map(
+          (blog) => blog.apiRepr())
+      });
+    })
+    .catch(
+      err => {
+        console.error(err);
+        res.status(500).json({message: 'Internal server error'});
+    });
 });
 
+// GET by ID
+router.get('/:id', (req, res) => {
+  BlogPosts
+    .findById(req.params.id)
+    .exec()
+    .then(blog =>res.json(blog.apiRepr()))
+    .catch(err => {
+      console.error(err);
+        res.status(500).json({message: 'Internal server error'})
+    });
+});
 
-// POST new blog posts
-router.post('/', jsonParser, (req, res) => {
+//POST - create new
+router.post('/', (req, res) => {
+
   const requiredFields = ['title', 'content', 'author'];
   for (let i=0; i<requiredFields.length; i++) {
     const field = requiredFields[i];
@@ -30,44 +51,64 @@ router.post('/', jsonParser, (req, res) => {
       return res.status(400).send(message);
     }
   }
-  const item = BlogPosts.create(req.body.title, req.body.content, req.body.author);
-  res.status(201).json(item);
+
+  BlogPosts
+    .create({
+      title: req.body.title,
+      content: req.body.content,
+      author: req.body.author})
+    .then(
+      blog => res.status(201).json(blog.apiRepr()))
+    .catch(err => {
+      console.error(err);
+      res.status(500).json({message: 'Internal server error'});
+    });
 });
 
-// DELETE blog post by id
-router.delete('/:id', (req, res) => {
-  BlogPosts.delete(req.params.id);
-  console.log(`Deleted blog with ID \`${req.params.ID}\``);
-  res.status(204).end();
-});
-
-// PUT (update) blog post
-router.put('/:id', jsonParser, (req, res) => {
-  const requiredFields = ['title', 'content', 'author', 'id'];
-  for (let i=0; i<requiredFields.length; i++) {
-    const field = requiredFields[i];
-    if (!(field in req.body)) {
-      const message = `Missing \`${field}\` in request body`
-      console.error(message);
-      return res.status(400).send(message);
-    }
-  }
-  if (req.params.id !== req.body.id) {
+//Update by ID
+router.put('/:id', (req, res) => {
+  if (!(req.params.id && req.body.id && req.params.id === req.body.id)) {
     const message = (
-      `Request path id (${req.params.id}) and request body id `
+      `Request path id (${req.params.id}) and request body id ` +
       `(${req.body.id}) must match`);
     console.error(message);
-    return res.status(400).send(message);
+    res.status(400).json({message: message});
   }
-  console.log(`Updating blog post with ID \`${req.params.id}\``);
-  const updatedBlog = BlogPosts.update({
-    id: req.params.id,
-    title: req.body.title,
-    content: req.body.content,
-    author: req.body.author
+
+
+  const toUpdate = {};
+  const updateableFields = ['title', 'content', 'author'];
+
+  updateableFields.forEach(field => {
+    if (field in req.body) {
+      toUpdate[field] = req.body[field];
+    }
   });
-  res.status(204).json(updatedBlog);
-})
+
+  BlogPosts
+    .findByIdAndUpdate(req.params.id, {$set: toUpdate})
+    .exec()
+    .then(blog => res.status(204).end())
+    .catch(err => res.status(500).json({message: 'Internal server error'}));
+});
+
+// Delete by ID
+
+router.delete('/:id', (req, res) => {
+  BlogPosts
+    .findByIdAndRemove(req.params.id)
+    .exec()
+    .then(blog => res.status(204).end())
+    .catch(err => res.status(500).json({message: 'Internal server error'}));
+});
+
+// catch-all endpoint if client makes request to non-existent endpoint
+router.use('*', function(req, res) {
+  res.status(404).json({message: 'Not Found'});
+});
+
+
+
 
 
 
